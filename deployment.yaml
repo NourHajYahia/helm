@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: mongo
-          image: mongo:6.0
+          image: mongo:5.0
           ports:
             - containerPort: 27017
           volumeMounts:
@@ -31,18 +31,87 @@ spec:
             - "--replSet"
             - "rs0"
             - "--bind_ip_all"
-            - "--noauth" # Disable authentication
-      initContainers:
+            - "--noauth"  # Disable authentication
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "print('waiting for db to be ready')"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "print('waiting for db to be alive')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+
+        # Sidecar container to initialize the replica set
         - name: rs-init
-          image: mongo:6.0
+          image: mongo:5.0
           command:
             - bash
             - "-c"
             - |
-              until mongo --host mongo-0.mongo:27017 --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-0.mongo:27017'}, {_id: 1, host: 'mongo-1.mongo:27017'}, {_id: 2, host: 'mongo-2.mongo:27017'}]})"; do
-                echo "Waiting for MongoDB to be ready..."
-                sleep 2
-              done
+              # Check if replica set is already initialized
+              if ! mongo --host localhost:27017 --eval "rs.status()" | grep -q '"ok" : 1'; then
+                # Wait for MongoDB to be ready
+                until mongo --host localhost:27017 --eval "rs.status()"; do
+                  echo "Waiting for MongoDB replica set to be ready..."
+                  sleep 2
+                done
+              else
+                echo "Replica set already initialized."
+              fi
+
+              exit 0
+          readinessProbe:
+            exec:
+              command:
+                - "mongo"
+                - "--host"
+                - "localhost:27017"
+                - "--eval"
+                - "rs.status()"
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            exec:
+              command:
+                - "mongo"
+                - "--host"
+                - "localhost:27017"
+                - "--eval"
+                - "rs.status()"
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-data-pvc
+
   volumeClaimTemplates:
     - metadata:
         name: mongo-data
@@ -51,4 +120,3 @@ spec:
         resources:
           requests:
             storage: 10Gi
-

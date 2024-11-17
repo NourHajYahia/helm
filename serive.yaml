@@ -3,12 +3,13 @@ kind: Service
 metadata:
   name: mongo
   labels:
-    name: mongo
     app: demo-voting-app
 spec:
-  ports:
-    - port: 27017
-  clusterIP: None
+  clusterIP: None # Headless service for StatefulSet
   selector:
     name: mongo
     app: demo-voting-app
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
