@@ -3,12 +3,12 @@ kind: Service
 metadata:
   name: mongo
   labels:
-    name: mongo-service
+    name: mongo
     app: demo-voting-app
 spec:
   ports:
     - port: 27017
-      targetPort: 27017
+  clusterIP: None
   selector:
-    name: mongo-pod
+    name: mongo
     app: demo-voting-app

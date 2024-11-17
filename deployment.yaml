@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  labels:
+    name: mongo
+    app: demo-voting-app
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      name: mongo
+      app: demo-voting-app
+  template:
+    metadata:
+      labels:
+        name: mongo
+        app: demo-voting-app
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:6.0
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          command:
+            - mongod
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+            - "--noauth" # Disable authentication
+      initContainers:
+        - name: rs-init
+          image: mongo:6.0
+          command:
+            - bash
+            - "-c"
+            - |
+              until mongo --host mongo-0.mongo:27017 --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-0.mongo:27017'}, {_id: 1, host: 'mongo-1.mongo:27017'}, {_id: 2, host: 'mongo-2.mongo:27017'}]})"; do
+                echo "Waiting for MongoDB to be ready..."
+                sleep 2
+              done
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
