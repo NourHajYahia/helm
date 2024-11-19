@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mongo.fullname" . }}
+  labels:
+    {{- include "mongo.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "mongo.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "mongo.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "mongo.name" . }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          command:
+            - mongod
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+            - "--noauth"  # Disable authentication
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+        # # Sidecar container to initialize the replica set
+        # - name: rs-init
+        #   image: mongo:4.4
+        #   command:
+        #     - bash
+        #     - "-c"
+        #     - |
+        #       # Check if replica set is already initialized
+        #       mongo --host localhost:27017 --eval "rs.status()"
+        #       if ! mongo --host localhost:27017 --eval "rs.status()" | grep -q '"ok" : 1'; then
+        #         echo "Replica set initializing ...."
+        #         until mongo --host localhost:27017 --eval "rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost27017'}]})"; do
+        #           echo "Waiting for MongoDB to be ready..."
+        #           sleep 2
+        #         done
+        #       else
+        #         echo "Replica set already initialized."
+        #         exit 0
+        #       fi
+
+        #   resources:
+        #     requests:
+        #       memory: "128Mi"
+        #       cpu: "100m"
+        #     limits:
+        #       memory: "256Mi"
+        #       cpu: "500m"
+
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-data-pvc
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
